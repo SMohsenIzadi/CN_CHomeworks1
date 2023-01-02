@@ -3,7 +3,6 @@
 
 #include <string>
 
-std::string get_path();
 void to_lower(std::string &str);
 
 #endif

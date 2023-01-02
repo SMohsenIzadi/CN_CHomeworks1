@@ -9,7 +9,6 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <algorithm>
 
 rapidjson::Document configs;
 std::string configs_path = get_path()+"/config.json";
@@ -53,12 +52,6 @@ void get_users(std::vector<User_t> &users)
             .size = (*it)["size"].GetInt(),
             .is_admin = (*it)["admin"].GetBool()
         };
-
-        // std::string is_admin((*it)["admin"].GetString());
-        // std::transform(is_admin.begin(), is_admin.end(), is_admin.begin(),
-        //     [](unsigned char c){ return std::tolower(c); });
-
-        // user.is_admin = (is_admin == "true");
 
         users.push_back(user);
 

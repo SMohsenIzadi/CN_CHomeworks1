@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <linux/limits.h>
+#include <algorithm>
 
 
 //Get executable path (Current working directrory)
@@ -14,4 +15,10 @@ std::string get_path() {
 
     std::string str(buf);
     return str.substr(0, str.rfind('/'));
+}
+
+void to_lower(std::string &str)
+{
+    std::transform(str.begin(), str.end(), str.begin(),
+            [](unsigned char c){ return std::tolower(c); });
 }
