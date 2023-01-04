@@ -10,9 +10,9 @@
     },
     {
 		"user": "Mohsen",
-		"password": "1234",
+		"password": "12345",
 		"admin": false,
-		"size": 2048
+		"size": 10
     }
   ],
     "files": [

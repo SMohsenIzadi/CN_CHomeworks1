@@ -9,16 +9,20 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <mutex>
+#include <shared_mutex>
 
 rapidjson::Document configs;
-std::string configs_path = get_path()+"/config.json";
+static std::shared_mutex configs_mutex;
+
+std::string configs_path = get_path() + "/config.json";
 
 bool load_configs()
 {
     std::ifstream config_file(configs_path);
-    if(!config_file)
+    if (!config_file)
     {
-        std::cout<<"ERROR:config.json not found!"<<std::endl;
+        std::cout << "ERROR:config.json not found!" << std::endl;
         return false;
     }
 
@@ -27,7 +31,7 @@ bool load_configs()
     config_file.close();
 
     std::string config_str = buffer.str();
-    
+
     configs.Parse(buffer.str().c_str());
 
     return true;
@@ -35,66 +39,68 @@ bool load_configs()
 
 void get_users(std::vector<User_t> &users)
 {
-    const rapidjson::Value& json_users = configs["users"];
+    configs_mutex.lock_shared();
+
+    const rapidjson::Value &json_users = configs["users"];
     users.clear();
 
     uint32_t id_cntr = 0;
-    for(
+    for (
         rapidjson::Value::ConstValueIterator it = json_users.Begin();
         it != json_users.End();
-        it++
-    )
+        it++)
     {
         User_t user = {
             .uid = id_cntr,
             .username = (*it)["user"].GetString(),
             .password = (*it)["password"].GetString(),
-            .size = (*it)["size"].GetInt(),
-            .is_admin = (*it)["admin"].GetBool()
-        };
+            .size = (uint64_t)(*it)["size"].GetInt64(),
+            .is_admin = (*it)["admin"].GetBool()};
 
         users.push_back(user);
 
         id_cntr++;
     }
+
+    configs_mutex.unlock_shared();
 }
 
-bool update_user(User_t user, bool flush)
+// set new_size (bytes)
+bool update_size(std::string username, uint64_t new_size)
 {
-    //Fetch all users from RapidJson Document (configs)
+    // Fetch all users from RapidJson Document (configs)
     std::vector<User_t> user_list;
     get_users(user_list);
 
     bool user_exists = false;
 
-    //Check if User exists then update RapidJson Document (configs)
-    for(
+    configs_mutex.lock();
+
+    // Check if User exists then update RapidJson Document (configs)
+    for (
         std::vector<User_t>::iterator it = user_list.begin();
         it != user_list.end();
-        it++
-    )
+        it++)
     {
-        if(it->username.compare(user.username) == 0)
+        if (it->username.compare(username) == 0)
         {
-            configs["users"][user.uid]["password"]
-                .SetString(rapidjson::StringRef(user.password.c_str()));
+            uint64_t size_in_kbytes = new_size / 1024;
 
-            configs["users"][user.uid]["size"]
-                .SetInt(user.size);
-
-            configs["users"][user.uid]["admin"]
-                .SetBool(user.is_admin);
+            configs["users"][it->uid]["size"]
+                .SetInt64((int64_t)size_in_kbytes);
 
             user_exists = true;
             break;
         }
     }
 
-    //if user exists just write configs to json file (Optimistic write) 
-    if(user_exists && flush)
+    // if user exists just write configs to json file (Optimistic write)
+    if (user_exists)
     {
         write_configs();
     }
+
+    configs_mutex.unlock();
 
     return user_exists;
 }
@@ -102,7 +108,7 @@ bool update_user(User_t user, bool flush)
 void write_configs()
 {
     std::ofstream configs_file(configs_path);
-    rapidjson::OStreamWrapper osw { configs_file };
+    rapidjson::OStreamWrapper osw{configs_file};
     rapidjson::Writer<rapidjson::OStreamWrapper> writer(osw);
     configs.Accept(writer);
     configs_file.close();
@@ -114,26 +120,84 @@ void get_ports(uint16_t &cmd_port, uint16_t &data_port)
     data_port = (uint16_t)configs["dataChannelPort"].GetInt();
 }
 
-void get_files(std::vector<std::string>& files)
+void get_restricted_files(std::vector<std::string> &files)
 {
+    configs_mutex.lock_shared();
     files.clear();
-    rapidjson::Value& files_json = configs["files"];
+    rapidjson::Value &files_json = configs["files"];
 
-    for(
+    for (
         rapidjson::Value::ConstValueIterator it = files_json.Begin();
         it != files_json.End();
-        it++
-    )
+        it++)
     {
         files.push_back(
-            (*it).GetString()
-        );
+            (*it).GetString());
     }
+    configs_mutex.unlock_shared();
 }
 
+std::string get_user_pass(std::string username)
+{
+    std::vector<User_t> user_list;
+    get_users(user_list);
 
+    for (auto user_in_list : user_list)
+    {
+        if (user_in_list.username.compare(username) == 0)
+        {
+            return user_in_list.password;
+        }
+    }
 
+    return std::string("");
+}
 
+// get user size in bytes
+uint64_t get_user_size(std::string username)
+{
+    std::vector<User_t> user_list;
+    get_users(user_list);
 
+    for (auto user_in_list : user_list)
+    {
+        if (user_in_list.username.compare(username) == 0)
+        {
+            return user_in_list.size * 1024;
+        }
+    }
 
+    return 0;
+}
 
+bool is_user_admin(std::string username)
+{
+    std::vector<User_t> user_list;
+    get_users(user_list);
+
+    for (auto user_in_list : user_list)
+    {
+        if (user_in_list.username.compare(username) == 0)
+        {
+            return user_in_list.is_admin;
+        }
+    }
+
+    return false;
+}
+
+bool user_exists(std::string username)
+{
+    std::vector<User_t> user_list;
+    get_users(user_list);
+
+    for (auto user_in_list : user_list)
+    {
+        if (user_in_list.username.compare(username) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}

@@ -9,7 +9,7 @@ typedef struct
     std::uint32_t uid;
     std::string username;
     std::string password;
-    std::int32_t size;
+    std::uint64_t size;
     bool is_admin;
 } User_t;
 
