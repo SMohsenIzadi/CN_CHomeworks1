@@ -5,6 +5,15 @@
 		},
 		{
 			"path": "sFTP_Client"
+		},
+		{
+			"path": "wServer"
+		},
+		{
+			"path": "sChat"
+		},
+		{
+			"path": "sChat_Client"
 		}
 	],
 	"settings": {
