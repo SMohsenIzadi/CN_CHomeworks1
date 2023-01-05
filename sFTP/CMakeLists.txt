@@ -18,4 +18,4 @@ target_include_directories(sFTP PUBLIC
                           "${PROJECT_SOURCE_DIR}/dependencies"
                           )
 
-target_link_libraries(sFTP PUBLIC sFTP_Core -luuid)
+target_link_libraries(sFTP PUBLIC sFTP_Core)
