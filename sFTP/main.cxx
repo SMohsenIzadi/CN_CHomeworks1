@@ -1,22 +1,10 @@
-#include "config_man.hxx"
-#include "utilities.hxx"
-
 #include <iostream>
-#include <unistd.h>
 #include <string>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <memory.h>
-#include <map>
+#include <unistd.h>
 
-#include <thread>
-
+#include "config_man.hxx"
 #include "net_man.hxx"
 #include "socket_man.hxx"
-#include "utilities.hxx"
 
 int main()
 {

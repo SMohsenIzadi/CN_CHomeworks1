@@ -1,9 +1,10 @@
 #ifndef _SFTP_CONFIG_MAN_H_
 #define _SFTP_CONFIG_MAN_H_
 
-#include <vector>
-#include "types.hxx"
 #include <stdint.h>
+#include <vector>
+
+#include "types.hxx"
 
 bool load_configs();
 void get_users(std::vector<User_t> &users);

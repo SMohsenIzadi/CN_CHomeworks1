@@ -1,8 +1,8 @@
 #ifndef _LOG_MAN_H_
 #define _LOG_MAN_H_
 
-#include <string>
 #include <mutex>
+#include <string>
 #include <shared_mutex>
 
 //Simple log mechanism

@@ -1,8 +1,8 @@
 #ifndef _SFTP_NET_MAN_H_
 #define _SFTP_NET_MAN_H_
 
-#include <sys/types.h>
 #include <string>
+#include <sys/types.h>
 
 #include "log_man.hxx"
 

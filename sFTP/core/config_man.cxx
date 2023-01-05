@@ -1,16 +1,18 @@
-#include "config_man.hxx"
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <shared_mutex>
+#include <sstream>
+#include <string>
+
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
 #include <rapidjson/ostreamwrapper.h>
+
+#include "config_man.hxx"
 #include "utilities.hxx"
 
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <mutex>
-#include <shared_mutex>
 
 rapidjson::Document configs;
 static std::shared_mutex configs_mutex;

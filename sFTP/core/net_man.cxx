@@ -1,6 +1,6 @@
-#include <netdb.h>
 #include <arpa/inet.h>
 #include <memory.h>
+#include <netdb.h>
 #include <iostream>
 #include <unistd.h>
 

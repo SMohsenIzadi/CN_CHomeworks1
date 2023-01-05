@@ -1,19 +1,19 @@
 #include "socket_man.hxx"
 
-#include <iostream>
+#include <algorithm>
+#include <arpa/inet.h>
+#include <filesystem>
 #include <fstream>
-#include <unistd.h>
+#include <memory.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <iostream>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <memory.h>
-#include <algorithm>
-#include <filesystem>
+#include <unistd.h>
 
-#include "net_man.hxx"
 #include "config_man.hxx"
+#include "net_man.hxx"
 #include "net_man.hxx"
 #include "utilities.hxx"
 
