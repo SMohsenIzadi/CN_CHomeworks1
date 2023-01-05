@@ -4,9 +4,12 @@
 #include <sys/types.h>
 #include <string>
 
-void get_addrinfo(struct addrinfo *info, int port);
+#include "log_man.hxx"
+
+int get_addrinfo(struct addrinfo **info, int port, logger &log_man);
 void get_addr_str(const struct addrinfo * const info, char *ip_str);
-void get_socket(int *socket_fd, int port, std::string name);
+int get_socket(int port, std::string name, logger &log_man);
 void *get_in_addr(struct sockaddr *sa);
+bool test_socket(uint16_t port);
 
 #endif

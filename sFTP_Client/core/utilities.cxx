@@ -19,10 +19,17 @@ bool file_exists(std::string file_path)
     return true;
 }
 
-//Get file size in butes
+// Get file size in butes
 uintmax_t filesize(std::string file_path)
 {
-    return std::filesystem::file_size(file_path);
+    if (file_exists(file_path))
+    {
+        return std::filesystem::file_size(file_path);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 // Get executable path (Current working directrory)
@@ -82,7 +89,7 @@ std::string prompt_for_cmd()
     return response;
 }
 
-static bool compare_char(char & c1, char & c2)
+static bool compare_char(char &c1, char &c2)
 {
     if (c1 == c2)
         return true;
@@ -93,6 +100,25 @@ static bool compare_char(char & c1, char & c2)
 
 bool equalstr(std::string str1, std::string str2)
 {
-    return ( (str1.size() == str2.size() ) &&
-             std::equal(str1.begin(), str1.end(), str2.begin(), &compare_char) );
+    return ((str1.size() == str2.size()) &&
+            std::equal(str1.begin(), str1.end(), str2.begin(), &compare_char));
+}
+
+void extract_command(std::string input, std::string &command, std::string &argument)
+{
+    size_t space_pos = input.find(' ');
+
+    if (space_pos == std::string::npos)
+    {
+        command = input;
+        to_lower(command);
+        argument = std::string("");
+
+        return;
+    }
+
+    command = input.substr(0, space_pos);
+    to_lower(command);
+    argument = input.substr(space_pos + 1);
+    trim(argument);
 }

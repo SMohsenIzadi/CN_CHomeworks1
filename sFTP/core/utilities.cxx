@@ -8,8 +8,8 @@
 
 bool file_exists(std::string filename)
 {
-    std::string file_path = (filename[0] != '/') ? get_path() + '/' + filename : get_path() + filename;
-    std::ifstream file(file_path);
+    //std::string file_path = (filename[0] != '/') ? get_path() + '/' + filename : get_path() + filename;
+    std::ifstream file(filename);
     if (!file)
     {
         return false;
@@ -19,10 +19,16 @@ bool file_exists(std::string filename)
     return true;
 }
 
-uintmax_t filesize(std::string filename)
+uintmax_t filesize(std::string file_path)
 {
-    std::string file_path = (filename[0] != '/') ? get_path() + '/' + filename : get_path() + filename;
-    return std::filesystem::file_size(file_path);
+    if (file_exists(file_path))
+    {
+        return std::filesystem::file_size(file_path);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 // Get executable path (Current working directrory)

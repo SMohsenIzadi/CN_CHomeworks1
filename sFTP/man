@@ -1,1 +1,19 @@
-USER [name], its argument is used to specify the user's string. It is used for user authentication.
+Usage:
+    [command] [argument]
+    Note: Only one space between command and argument is acceptable.
+
+Commands:
+    RETR [filename], its argument is used to specify requested file name. It is used for downloading files.
+    UPLOAD [filepath], its argument is used to specify filepath on client machine. It is used for uploading file.
+    QUIT [NOARG], it takes no argument. It is used for logging out of current user.
+
+Anonymous commands:
+    USER [name], its argument is used to specify the user's username. It is used for user authentication.
+    PASS [pass], its argument is used to specify the user's password. It is used for user authentication after USER command.
+    HELP [NOARG], it takes no argument. It is used for viewing manual page.
+    EXIT [NOARG], it takes no argument. It is used for exiting program (disconnect).
+
+Examples:
+    #sFTP>> retr test.txt
+    #sFTP>> upload test.txt
+    #sFTP>> exit

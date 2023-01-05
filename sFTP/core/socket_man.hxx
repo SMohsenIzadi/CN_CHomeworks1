@@ -2,13 +2,17 @@
 #define _SFTP_SOCKET_MAN_H_
 
 #include <map>
-#include <vector>
 #include <mutex>
 #include <shared_mutex>
 #include <thread>
+#include <vector>
+
+#include "log_man.hxx"
 
 class socket_man
 {
+    logger &_logger;
+
     std::map<std::string, int> _user_links;
     std::shared_mutex _user_links_mutex;
 
@@ -28,7 +32,7 @@ class socket_man
 
     void accept_data(int data_socket);
     void accept_cmd(int cmd_socket);
-    void client_handler(int client_cmd_fd);
+    void client_handler(int client_cmd_fd, std::string client_ip);
 
     void send_to_socket(int socket_fd, uint16_t code, char* message, uint32_t size);
     size_t receive_from_socket(int socket_fd, char* data, uint16_t *code = nullptr);
@@ -43,9 +47,9 @@ class socket_man
     bool should_exit();
 
 public:
-    socket_man(int data_socket, int cmd_socket);
+    socket_man(int data_socket, int cmd_socket, logger &log_man);
     ~socket_man();
-    void run();
+    void run(uint16_t data_port, uint16_t cmd_port);
 };
 
 #endif

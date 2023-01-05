@@ -10,20 +10,22 @@
 #include <netdb.h>
 #include <memory.h>
 #include <algorithm>
+#include <filesystem>
 
 #include "net_man.hxx"
 #include "config_man.hxx"
+#include "net_man.hxx"
 #include "utilities.hxx"
 
 #define BUFFER_SIZE 8192
 #define NO_MSG (char *)std::string("NOMSG").c_str()
 #define NO_MSG_SIZE 5
 
-socket_man::socket_man(int data_socket, int cmd_socket)
-    : _data_fd(data_socket), _cmd_fd(cmd_socket)
+socket_man::socket_man(int data_socket, int cmd_socket, logger &log_man)
+    : _data_fd(data_socket), _cmd_fd(cmd_socket), _logger(log_man)
 {
-    this->_data_fd_isvalid = true;
-    this->_cmd_fd_isvalid = true;
+    _data_fd_isvalid = false;
+    _cmd_fd_isvalid = false;
 }
 
 socket_man::~socket_man()
@@ -40,45 +42,89 @@ socket_man::~socket_man()
 }
 
 // start two threads for accepting command and data sockets
-void socket_man::run()
+void socket_man::run(uint16_t data_port, uint16_t cmd_port)
 {
+    _logger.set_state(logger::log_state::no_log);
     std::thread cmd_thread(&socket_man::accept_cmd, this, _cmd_fd);
     std::thread data_thread(&socket_man::accept_data, this, _data_fd);
 
-    std::cout << "sFTP server running... (type exit to terminate)" << std::endl;
+    // Test if both sockets are connectable 
+    bool _cmd_is_running = true;
+    bool _data_is_running = true;
 
-    bool exited = false;
-    std::string user_cmd;
-
-    while (!exited)
+    while (_cmd_fd_isvalid != true)
+        ;
+    if (!test_socket(cmd_port))
     {
-        // sFTP pseudo command line interface
-        std::cout << "sFTP>>";
+        _cmd_is_running = false;
+    }
 
-        do
+    while (_cmd_is_running && _data_fd_isvalid != true)
+        ;
+    if (_cmd_is_running && !test_socket(data_port))
+    {
+        _data_is_running = false;
+    }
+
+    // set log level to default
+    _logger.set_state(logger::log_state::default_state);
+
+    if (_data_is_running && _cmd_is_running)
+    {
+        std::cout << "sFTP server running... (type exit to terminate)" << std::endl;
+
+        bool exited = false;
+        std::string user_cmd;
+
+        while (!exited)
         {
-            std::getline(std::cin, user_cmd);
-        } while (user_cmd.size() == 0);
+            // sFTP pseudo command line interface
+            std::cout << "sFTP>>";
 
-        to_lower(user_cmd);
-        if (user_cmd.compare("exit") == 0)
-        {
-            // setting exit signal for threads
-            _exit_mutex.lock();
-            _exit_sig = true;
-            _exit_mutex.unlock();
+            do
+            {
+                std::getline(std::cin, user_cmd);
+            } while (user_cmd.size() == 0);
 
-            break;
+            to_lower(user_cmd);
+            if (user_cmd.compare("exit") == 0)
+            {
+                // setting exit signal for threads
+                _exit_mutex.lock();
+                _exit_sig = true;
+                _exit_mutex.unlock();
+
+                break;
+            }
+            else
+            {
+                std::cout << "invalid command." << std::endl;
+            }
         }
-        else
-        {
-            std::cout << "invalid command." << std::endl;
-        }
+    }
+    else
+    {
+        std::cout << "Failed to start server." << std::endl;
+
+        _exit_mutex.lock();
+        _exit_sig = true;
+        _exit_mutex.unlock();
     }
 
     // Join all active threads and wait to finish before exiting server
     cmd_thread.join();
     data_thread.join();
+
+    if (!_cmd_is_running)
+    {
+        std::string log_msg = "cmd_port is not listening.";
+        _logger.log("socket_man.run.cmd_port", log_msg, logger::info);
+    }
+    else if (!_data_is_running)
+    {
+        std::string log_msg = "data_port is not listening.";
+        _logger.log("socket_man.run.data_port", log_msg, logger::info);
+    }
 
     _client_threads_mutex.lock_shared();
     for (
@@ -89,12 +135,15 @@ void socket_man::run()
         (*it).join();
     }
     _client_threads_mutex.unlock_shared();
+
+    std::string log_msg = "Exiting server.";
+    _logger.log("socket_man.run", log_msg, logger::info);
 }
 
 // just accepts the call no new thread and send data_fd back to client
 void socket_man::accept_data(int data_socket)
 {
-    listen(data_socket, 5);
+    _data_fd_isvalid = true;
 
     while (true)
     {
@@ -110,40 +159,43 @@ void socket_man::accept_data(int data_socket)
         sockaddr_storage client_addr;
         socklen_t client_addr_size = sizeof(sockaddr_storage);
 
-        // set timeout for accept
-        struct timeval tv;
-        fd_set readfds;
-        reset_select(data_socket, &tv, &readfds);
+        int client_socket = accept(data_socket, (struct sockaddr *)&client_addr, &client_addr_size);
 
-        if (select(data_socket + 1, &readfds, NULL, NULL, &tv) > 0)
+        if (client_socket == -1)
         {
-            int client_socket = accept(data_socket, (struct sockaddr *)&client_addr, &client_addr_size);
-
-            if (client_socket == -1)
+            if (errno == EWOULDBLOCK)
             {
-                // TODO: LOG errno
+                // There was no data to read
                 continue;
             }
 
-            char client_ip[INET6_ADDRSTRLEN];
+            std::string log_msg = "accept failed with errno = " + std::to_string(errno);
+            _logger.log("socket_man.accept_data", log_msg, logger::warning);
 
-            inet_ntop(
-                client_addr.ss_family,
-                get_in_addr((sockaddr *)&client_addr),
-                client_ip,
-                sizeof(client_ip));
-
-            // TODO: Log client_ip
-
-            send_to_socket(client_socket, client_socket, NO_MSG, NO_MSG_SIZE);
+            continue;
         }
+
+        char client_ip[INET6_ADDRSTRLEN];
+
+        inet_ntop(
+            client_addr.ss_family,
+            get_in_addr((sockaddr *)&client_addr),
+            client_ip,
+            sizeof(client_ip));
+
+        std::string client_ip_str(client_ip);
+
+        std::string log_msg = "Client requested data connection. IP: " + client_ip_str;
+        _logger.log("socket_man.accept_data", log_msg, logger::info);
+
+        send_to_socket(client_socket, client_socket, NO_MSG, NO_MSG_SIZE);
     }
 }
 
 // at client connection server make a thread for them
 void socket_man::accept_cmd(int cmd_socket)
 {
-    listen(cmd_socket, 5);
+    _cmd_fd_isvalid = true;
 
     while (true)
     {
@@ -158,41 +210,44 @@ void socket_man::accept_cmd(int cmd_socket)
         sockaddr_storage client_addr;
         socklen_t client_addr_size = sizeof(sockaddr_storage);
 
-        struct timeval tv;
-        fd_set readfds;
-        reset_select(cmd_socket, &tv, &readfds);
+        int client_socket = accept(cmd_socket, (struct sockaddr *)&client_addr, &client_addr_size);
 
-        if (select(cmd_socket + 1, &readfds, NULL, NULL, &tv) > 0)
+        if (client_socket == -1)
         {
-            int client_socket = accept(cmd_socket, (struct sockaddr *)&client_addr, &client_addr_size);
-
-            if (client_socket == -1)
+            if (errno == EWOULDBLOCK)
             {
-                // TODO: LOG this
-                std::cout << "Error in cmd connection. errno: " << errno << std::endl;
+                // There was no data to read
                 continue;
             }
 
-            char client_ip[INET6_ADDRSTRLEN];
+            std::string log_msg = "accept failed with errno = " + std::to_string(errno);
+            _logger.log("socket_man.accept_cmd", log_msg, logger::warning);
 
-            inet_ntop(
-                client_addr.ss_family,
-                get_in_addr((sockaddr *)&client_addr),
-                client_ip,
-                sizeof(client_ip));
-
-            // TODO: Log client_ip
-
-            // Make a thread for client
-            _client_threads_mutex.lock();
-            _client_threads.push_back(std::thread(&socket_man::client_handler, this, client_socket));
-            _client_threads_mutex.unlock();
+            continue;
         }
+
+        char client_ip[INET6_ADDRSTRLEN];
+
+        inet_ntop(
+            client_addr.ss_family,
+            get_in_addr((sockaddr *)&client_addr),
+            client_ip,
+            sizeof(client_ip));
+
+        std::string client_ip_str(client_ip);
+
+        std::string log_msg = "Client connected to server. IP: " + client_ip_str;
+        _logger.log("socket_man.accept_cmd", log_msg, logger::info);
+
+        // Make a thread for client
+        _client_threads_mutex.lock();
+        _client_threads.push_back(std::thread(&socket_man::client_handler, this, client_socket, client_ip_str));
+        _client_threads_mutex.unlock();
     }
 }
 
 // handle commands and requests from user
-void socket_man::client_handler(int client_cmd_fd)
+void socket_man::client_handler(int client_cmd_fd, std::string client_ip)
 {
     bool is_logged_in = false;
     bool auth_reqested = false;
@@ -221,6 +276,9 @@ void socket_man::client_handler(int client_cmd_fd)
             if (receive_size == -2)
             {
                 // receive_from_socket only return -2 if client disconnected
+                std::string log_msg = "Client disconnected. IP: " + client_ip;
+                _logger.log("socket_man.client_handler", log_msg, logger::info);
+
                 is_connection_alive = false;
                 continue;
             }
@@ -239,27 +297,33 @@ void socket_man::client_handler(int client_cmd_fd)
 
             if (command.compare("exit") == 0)
             {
+                std::string log_msg;
+
+                if (username.size() > 0)
+                {
+                    log_msg = "Client: " + username + ", requested exit. IP: " + client_ip;
+                }
+                else
+                {
+                    log_msg = "Anonymous client requested exit. IP: " + client_ip;
+                }
+
+                _logger.log("socket_man.client_handler", log_msg, logger::info);
+
                 is_connection_alive = false;
                 continue;
             }
 
             if (is_logged_in)
             {
-                if (command.compare("help") == 0)
+                if (command.compare("quit") == 0)
                 {
-                    // There is nothing in c++ standard about fstream thread-safty
-                    // so we manually add a lock mechanism to read man file
-                    _manual_page_mutex.lock();
+                    std::string log_msg = "Client: " + username + ", logged out";
+                    _logger.log("socket_man.client_handler", log_msg, logger::info);
 
-                    std::string manual_page = read_manual();
-                    send_to_socket(client_cmd_fd, 214, (char *)manual_page.c_str(), manual_page.size());
-
-                    _manual_page_mutex.unlock();
-                }
-                else if (command.compare("quit") == 0)
-                {
                     is_logged_in = false;
                     auth_reqested = false;
+                    username = std::string();
 
                     char response[] = "Successful Quit.";
                     send_to_socket(client_cmd_fd, 221, response, sizeof(response));
@@ -306,9 +370,15 @@ void socket_man::client_handler(int client_cmd_fd)
 
                         if (download_result)
                         {
+                            std::string log_msg = "Client: " + username + ", downloaded file: " + argument +
+                                                  +", IP: " + client_ip;
+                            _logger.log("socket_man.client_handler", log_msg, logger::info);
+
                             char response[] = "Successful Download.";
                             send_to_socket(client_cmd_fd, 226, response, sizeof(response));
                         }
+
+                        close(client_data_fd);
                     }
                 }
                 else if (command.compare("upload") == 0)
@@ -321,10 +391,25 @@ void socket_man::client_handler(int client_cmd_fd)
                         continue;
                     }
 
+                    std::string filename = std::filesystem::path(argument).filename();
+
+                    if (filename.size() <= 0 || filename.compare(".") == 0 || filename.compare("..") == 0)
+                    {
+                        char response[] = "Error. Invalid filename.";
+                        send_to_socket(client_cmd_fd, 500, response, sizeof(response));
+
+                        continue;
+                    }
+
                     if (!is_user_admin(username))
                     {
                         char response[] = "File unavailable.";
                         send_to_socket(client_cmd_fd, 550, response, sizeof(response));
+                    }
+                    else if (file_exists(filename))
+                    {
+                        char response[] = "Error. File already exists.";
+                        send_to_socket(client_cmd_fd, 500, response, sizeof(response));
                     }
                     else
                     {
@@ -339,13 +424,19 @@ void socket_man::client_handler(int client_cmd_fd)
                             continue;
                         }
 
-                        bool upload_result = upload((int)client_data_fd, argument);
+                        bool upload_result = upload((int)client_data_fd, filename);
 
                         if (upload_result)
                         {
+                            std::string log_msg = "Client: " + username + ", uploaded file: " + filename +
+                                                  +", IP: " + client_ip;
+                            _logger.log("socket_man.client_handler", log_msg, logger::info);
+
                             char response[] = "Successful Upload.";
                             send_to_socket(client_cmd_fd, 226, response, sizeof(response));
                         }
+
+                        close(client_data_fd);
                     }
                 }
                 else
@@ -356,7 +447,18 @@ void socket_man::client_handler(int client_cmd_fd)
             }
             else
             {
-                if (!auth_reqested && command.compare("pass") == 0)
+                if (command.compare("help") == 0)
+                {
+                    // There is nothing in c++ standard about fstream thread-safty
+                    // so we manually add a lock mechanism to read man file
+                    _manual_page_mutex.lock();
+
+                    std::string manual_page = read_manual();
+                    send_to_socket(client_cmd_fd, 214, (char *)manual_page.c_str(), manual_page.size());
+
+                    _manual_page_mutex.unlock();
+                }
+                else if (!auth_reqested && command.compare("pass") == 0)
                 {
                     char response[] = "Bad sequence of commands.";
                     send_to_socket(client_cmd_fd, 503, response, sizeof(response));
@@ -404,6 +506,10 @@ void socket_man::client_handler(int client_cmd_fd)
 
                     if (pass.compare(argument) != 0)
                     {
+                        std::string log_msg = "Client: " + username + ", Login failed: wrong password" +
+                                              +", IP: " + client_ip;
+                        _logger.log("socket_man.client_handler", log_msg, logger::info);
+
                         char response[] = "Invalid username or password.";
                         send_to_socket(client_cmd_fd, 430, response, sizeof(response));
 
@@ -411,6 +517,10 @@ void socket_man::client_handler(int client_cmd_fd)
                     }
 
                     is_logged_in = true;
+
+                    std::string log_msg = "Client: " + username + ", Logged in successfully" +
+                                          +", IP: " + client_ip;
+                    _logger.log("socket_man.client_handler", log_msg, logger::info);
 
                     char response[] = "User logged in, proceed. logged out if appropriate.";
                     send_to_socket(client_cmd_fd, 230, response, sizeof(response));
@@ -486,7 +596,9 @@ size_t socket_man::receive_from_socket(int socket_fd, char *data, uint16_t *code
 
         if (recv_result == -1)
         {
-            // TODO: LOG errno
+            std::string log_msg = "Internal error. Failed to receive from socket with errno = " + std::to_string(errno);
+            _logger.log("socket_man.client_handler", log_msg, logger::error);
+
             free(data);
             return -1;
         }
@@ -508,7 +620,11 @@ size_t socket_man::receive_from_socket(int socket_fd, char *data, uint16_t *code
         }
         else if (code_16b != code_16b_tmp)
         {
-            // TODO: Log invalid receive sequence
+            std::string log_msg = "Internal error. Received wrong sequence of data with code: " +
+                                  std::to_string(code_16b_tmp) +
+                                  " expected: " + std::to_string(code_16b);
+            _logger.log("socket_man.client_handler", log_msg, logger::warning);
+
             continue;
         }
 
@@ -576,7 +692,7 @@ void socket_man::send_to_socket(int socket_fd, uint16_t code, char *message, uin
     // 6byte = 1byte(seg_cntr) + 2byte(code) + 3byte(size)
     int max_available_size = BUFFER_SIZE - 6;
 
-    // divide message to (BUFFER_SIZE - 2) chunks
+    // divide message to (BUFFER_SIZE - 6) chunks
     int remaining_bytes = size;
     char *start_ptr = message;
 
@@ -602,8 +718,9 @@ void socket_man::send_to_socket(int socket_fd, uint16_t code, char *message, uin
         int sent_bytes = send(socket_fd, response, bytes_to_send + 6, 0);
         if (sent_bytes == -1)
         {
-            // TODO: LOG this
-            std::cout << "send failed with errno: " << errno << std::endl;
+            std::string log_msg = "Failed to send buffer with errno: " + std::to_string(errno);
+            _logger.log("socket_man.client_handler", log_msg, logger::error);
+
             return;
         }
 

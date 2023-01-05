@@ -11,5 +11,6 @@ uintmax_t filesize(std::string file_path);
 bool file_exists(std::string file_path);
 std::string prompt_for_cmd();
 bool equalstr(std::string str1, std::string str2);
+void extract_command(std::string input, std::string &command, std::string &argument);
 
 #endif

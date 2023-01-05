@@ -55,8 +55,6 @@ bool get_file(int socket_fd, std::string *filename)
 
 bool send_file(int socket_fd, std::string *file_path)
 {
-    std::string filename = std::filesystem::path("/foo/bar.txt").filename();
-
     uintmax_t size = filesize(*file_path);
 
     // 1024 KByte = 1048576 Bytes
@@ -289,13 +287,13 @@ int connect_to_socket(const char *server_ip, int port, bool is_loop_back)
     struct addrinfo hints;
 
     memset(&hints, 0, sizeof(addrinfo));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET;
     hints.ai_flags = AI_PASSIVE;
     hints.ai_socktype = SOCK_STREAM;
 
     if (is_loop_back)
     {
-        getaddrinfo(NULL, std::to_string(port).c_str(), &hints, &service);
+        getaddrinfo("127.0.0.1", std::to_string(port).c_str(), &hints, &service);
     }
     else
     {

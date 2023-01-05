@@ -1,27 +1,40 @@
-#include "net_man.hxx"
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <memory.h>
 #include <iostream>
+#include <unistd.h>
 
-void get_addrinfo(struct addrinfo **info, int port)
+#include "net_man.hxx"
+
+int get_addrinfo(struct addrinfo **info, int port, logger &log_man)
 {
     int status;
 
     struct addrinfo hints;
 
     memset(&hints, 0, sizeof(addrinfo));
-    hints.ai_family = AF_UNSPEC;     // IPv4 or IPv6 doesn't matter
+    hints.ai_family = AF_INET;       // IPv4 only
     hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_PASSIVE;
 
     status = getaddrinfo(NULL, std::to_string(port).c_str(), &hints, info);
 
     if (status != 0)
     {
-        // TODO: LOG THIS
-        // std::cout << "getaddrinfo error status: " << status << std::endl;
+        if (status == EAI_SYSTEM)
+        {
+            std::string log_msg = "getaddrinfo returned EAI_SYSTEM with errno = " + std::to_string(errno);
+            log_man.log("net_man.get_addrinfo", log_msg, logger::error);
+        }
+        else
+        {
+            std::string log_msg = "getaddrinfo returned " + std::to_string(status);
+            log_man.log("net_man.get_addrinfo", log_msg, logger::error);
+        }
     }
+
+    return status;
 }
 
 void get_addr_str(const struct addrinfo *const info, char *ip_str)
@@ -42,7 +55,7 @@ void get_addr_str(const struct addrinfo *const info, char *ip_str)
 
 void set_socket_options(int socket_fd)
 {
-    // Make socket reusable
+    // Make socket reusable if needed
     int yes = 1;
     if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
     {
@@ -56,24 +69,56 @@ void set_socket_options(int socket_fd)
     setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 }
 
-void get_socket(int *socket_fd, int port, std::string name)
+int get_socket(int port, std::string name, logger &log_man)
 {
     struct addrinfo *serviceinfo;
+    int socket_fd;
 
-    get_addrinfo(&serviceinfo, port);
+    if (get_addrinfo(&serviceinfo, port, log_man) != 0)
+    {
+        freeaddrinfo(serviceinfo);
+        return -1;
+    }
 
     char IP[INET6_ADDRSTRLEN];
     get_addr_str(serviceinfo, IP);
     std::cout << "Listening on " << IP << ":" << port << " (" << name << ")" << std::endl;
 
-    *socket_fd = socket(serviceinfo->ai_family, serviceinfo->ai_socktype, serviceinfo->ai_protocol);
-    bind(*socket_fd, serviceinfo->ai_addr, serviceinfo->ai_addrlen);
+    socket_fd = socket(serviceinfo->ai_family, serviceinfo->ai_socktype, serviceinfo->ai_protocol);
 
+    set_socket_options(socket_fd);
+
+    if (socket_fd == -1)
+    {
+        std::string log_msg = "Error on socket() with errno = " + std::to_string(errno);
+        log_man.log("net_man.get_socket", log_msg, logger::error);
+
+        freeaddrinfo(serviceinfo);
+        return -1;
+    }
+
+    int can_bind = bind(socket_fd, serviceinfo->ai_addr, serviceinfo->ai_addrlen);
     freeaddrinfo(serviceinfo);
 
-    set_socket_options(*socket_fd);
+    if (can_bind == -1)
+    {
+        std::string log_msg = "Error on bind() with errno = " + std::to_string(errno);
+        log_man.log("net_man.get_socket", log_msg, logger::error);
 
-    // listen(*socket_fd, 5);
+        return -1;
+    }
+
+    int can_listen = listen(socket_fd, 5);
+
+    if (can_listen == -1)
+    {
+        std::string log_msg = "Error on listen() with errno = " + std::to_string(errno);
+        log_man.log("net_man.get_socket", log_msg, logger::error);
+
+        return -1;
+    }
+
+    return socket_fd;
 }
 
 void *get_in_addr(struct sockaddr *sa)
@@ -84,4 +129,35 @@ void *get_in_addr(struct sockaddr *sa)
     }
 
     return &(((struct sockaddr_in6 *)sa)->sin6_addr);
+}
+
+bool test_socket(uint16_t port)
+{
+    struct addrinfo *service;
+    struct addrinfo hints;
+
+    memset(&hints, 0, sizeof(addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_socktype = SOCK_STREAM;
+
+    getaddrinfo("127.0.0.1", std::to_string(port).c_str(), &hints, &service);
+
+    int socket_fd = socket(service->ai_family, service->ai_socktype, service->ai_protocol);
+
+    if (socket_fd == -1)
+    {
+        return true;
+    }
+
+    int status = connect(socket_fd, service->ai_addr, service->ai_addrlen);
+
+    if (status == -1)
+    {
+        close(socket_fd);
+        return false;
+    }
+
+    close(socket_fd);
+    return true;
 }
