@@ -87,7 +87,9 @@
 			"thread": "cpp",
 			"shared_mutex": "cpp",
 			"codecvt": "cpp",
-			"iomanip": "cpp"
+			"iomanip": "cpp",
+			"cerrno": "cpp",
+			"filesystem": "cpp"
 		}
 	}
 }
