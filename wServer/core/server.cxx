@@ -98,8 +98,14 @@ void serve(int client, void (*remove_thread)(int))
         while (remaining > 0)
         {
 
-            offset = send(client, response_str.c_str() + offset, remaining, 0);
-            remaining -= offset;
+            int sent_bytes = send(client, response_str.c_str() + offset, remaining, 0);
+            if(sent_bytes == -1)
+            {
+                break;
+            }
+
+            offset += sent_bytes;
+            remaining -= sent_bytes;
         }
 
     } while (recv_bytes != 0);

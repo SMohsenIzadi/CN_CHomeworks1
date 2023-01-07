@@ -1,5 +1,5 @@
-#ifndef _SOCKET_MAN_H_
-#define _SOCKET_MAN_H_
+#ifndef _WSERVER_UTILITIES_H_
+#define _WSERVER_UTILITIES_H_
 
 #include <string>
 

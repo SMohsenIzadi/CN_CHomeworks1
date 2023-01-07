@@ -1,0 +1,1 @@
+add_library(sChat_core utilities.cxx socket_man.cxx server.cxx)
