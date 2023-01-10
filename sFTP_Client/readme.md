@@ -56,7 +56,7 @@ bool get_file(int socket_fd, std::string *filename)
 این تابع از receive_from_socket برای دانلود فایل استفاده می کند.
 
 ## 3. نتایج پروژه
-اسکرین شات اجرای سرور:  
+اسکرین شات اجرای کلاینت:  
 ![Getting Started](screenshot_p1.png)
 ![Getting Started](screenshot_p2.png)
 
