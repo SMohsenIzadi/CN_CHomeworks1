@@ -42,3 +42,9 @@ typedef enum
 
 مقدار Message id همواره 0 است مگر در زمان دریافت پیام ها از سرور (RECEIVE) که پیام اول در این حالت برابر تعداد پیام های خوانده نشده و برای پیام های بعد همواره یکی کمتر از پیام قبل خواهد بود.
 
+## حداقل موارد لازم برای نصب کامپایل و اجرا
+
+حداقل موارد مورد نیاز:
+
+1. OS: linux (developed and tested on Kali) - Debian based distros are recommended
+2. Build system: CMake minimum version 3.24 
