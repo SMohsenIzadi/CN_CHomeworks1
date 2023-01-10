@@ -9,8 +9,6 @@
 struct User_t
 {
     uint16_t user_id;
-    std::string username;
-    // map<sender_id, message>
     std::map<uint16_t ,std::string> new_messages;
     bool is_online = false;
 };
@@ -37,8 +35,10 @@ private:
     std::mutex _id_offset_guard;
 
     int _socket;
-    std::vector<User_t *> _users;
+    std::map<std::string, User_t *> _users;
     std::mutex _users_guard;
+
+    std::vector<std::thread> _thread_pool;
 
     // return payload of message and type
     std::string recv_msg(int client_fd, bool *is_alive, Message_t *type, char *message_id = nullptr);
@@ -47,7 +47,8 @@ private:
     void send_list(int socket_fd, std::string username);
     void send_info(int socket_fd, uint16_t id);
     int forward(uint16_t receiver_id, uint16_t sender_id, std::string message);
-    void fetch(int socket_fd, uint16_t id);
+    void fetch(int socket_fd, std::string username);
+    User_t* get_user_by_id(uint16_t id);
 public:
     server();
     ~server();

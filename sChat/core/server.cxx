@@ -29,16 +29,21 @@ server::~server()
 {
     close(_socket);
 
-    _users_guard.lock();
-    for(
+    for (
+        auto it = _thread_pool.begin();
+        it != _thread_pool.end();
+        it++)
+    {
+        (*it).join();
+    }
+
+    for (
         auto it = _users.begin();
         it != _users.end();
-        it++
-    )
+        it++)
     {
-        free((*it));
+        free((*it).second);
     }
-    _users_guard.unlock();
 }
 
 void server::run()
@@ -70,55 +75,53 @@ void server::run()
             continue;
         }
 
-        std::thread(&server::client_handler, this, client_fd, payload);
+        _thread_pool.push_back(
+            std::thread(&server::client_handler, this, client_fd, payload));
     }
 }
 
 void server::client_handler(int client_fd, std::string username)
 {
-    User_t *user_profile = nullptr;
+    bool is_online = true;
+    uint16_t u_id = 0;
+    User_t profile;
 
     _users_guard.lock();
-    for (
-        auto it = _users.begin();
-        it != _users.end();
-        it++)
-    {
-        if (equalstr((*it)->username, username))
-        {
-            user_profile = *it;
-            user_profile->is_online = true;
-        }
-    }
 
-    if (user_profile == nullptr)
+    auto ptr_user = _users.find(username);
+
+    if (ptr_user != _users.end())
     {
+        profile = *((*ptr_user).second);
+        profile.is_online = true;
+    }
+    else
+    {
+        auto new_user = new User_t;
+        new_user->is_online = true;
         _id_offset_guard.lock();
-
-        user_profile = (User_t *)malloc(sizeof(User_t));
-        *user_profile = User_t{
-            .user_id = (uint16_t)(_id_offset + 1),
-            .username = username,
-            .is_online = true,
-        };
-
+        new_user->user_id = _id_offset;
         _id_offset++;
+        (new_user->new_messages).clear();
         _id_offset_guard.unlock();
+        _users.insert(std::make_pair(username, new_user));
 
-        _users.push_back(user_profile);
+        profile = *new_user;
     }
+
     _users_guard.unlock();
 
     send_msg(client_fd, Message_t::CONNACK, 0, "");
 
-    while (user_profile->is_online)
+    while (profile.is_online)
     {
         Message_t type;
-        char message_id;
-        std::string payload = recv_msg(client_fd, &(user_profile->is_online), &type, &message_id);
+        char message_id; 
+        std::string payload = recv_msg(client_fd, &(profile.is_online), &type, &message_id);
 
-        if (!(user_profile->is_online))
+        if (!(profile.is_online))
         {
+            // user left the server
             break;
         }
 
@@ -138,13 +141,13 @@ void server::client_handler(int client_fd, std::string username)
             std::string message = payload.substr(2);
 
             char buf[1];
-            buf[0] = forward(receiver_id, user_profile->user_id, message);
+            buf[0] = forward(receiver_id, profile.user_id, message);
 
             send_buf(client_fd, Message_t::SENDREPLY, 0, buf, 1);
         }
         else if (type == Message_t::RECEIVE)
         {
-            fetch(client_fd, user_profile->user_id);
+            fetch(client_fd, username);
         }
     }
 }
@@ -225,27 +228,38 @@ void server::send_list(int socket_fd, std::string username)
 {
     _users_guard.lock();
 
-    int id_cntr;
+    int id_cntr = 0;
     uint8_t len = 2 * (_users.size() - 1);
-    char response[len];
 
-    for (
-        auto it = _users.begin();
-        it != _users.end();
-        it++)
+    if (len > 0)
     {
-        if (!equalstr((*it)->username, username))
+        char response[len];
+
+        for (
+            auto it = _users.begin();
+            it != _users.end();
+            it++)
         {
-            response[id_cntr] = ((((*it)->user_id) & 0xFF00) >> 8);
-            id_cntr++;
-            response[id_cntr] = (((*it)->user_id) & 0x00FF);
-            id_cntr++;
+            if (!equalstr((*it).first, username))
+            {
+                auto user_id = ((*it).second)->user_id;
+
+                response[id_cntr] = ((user_id & 0xFF00) >> 8);
+                id_cntr++;
+                response[id_cntr] = (user_id & 0x00FF);
+                id_cntr++;
+            }
         }
+
+        send_buf(socket_fd, Message_t::LISTREPLY, 0, response, len);
+    }
+
+    else
+    {
+        send_msg(socket_fd, Message_t::LISTREPLY, 0, "");
     }
 
     _users_guard.unlock();
-
-    send_buf(socket_fd, Message_t::LISTREPLY, 0, response, len);
 }
 
 void server::send_info(int socket_fd, uint16_t id)
@@ -259,9 +273,10 @@ void server::send_info(int socket_fd, uint16_t id)
         it != _users.end();
         it++)
     {
-        if ((*it)->user_id == id)
+        auto user_id = (*it).second->user_id;
+        if (user_id == id)
         {
-            username = (*it)->username;
+            username = (*it).first;
             break;
         }
     }
@@ -271,9 +286,9 @@ void server::send_info(int socket_fd, uint16_t id)
     send_msg(socket_fd, Message_t::INFOREPLY, 0, username);
 }
 
-int server::forward(uint16_t receiver_id, uint16_t sender_id, std::string message)
+User_t *server::get_user_by_id(uint16_t id)
 {
-    bool result = false;
+    User_t *user_ptr = nullptr;
 
     _users_guard.lock();
 
@@ -282,46 +297,54 @@ int server::forward(uint16_t receiver_id, uint16_t sender_id, std::string messag
         it != _users.end();
         it++)
     {
-        if ((*it)->user_id == receiver_id)
+        if (((*it).second)->user_id == id)
         {
-            (*it)->new_messages.insert(std::make_pair(sender_id, message));
-            result = true;
-            break;
+            user_ptr = (*it).second;
         }
     }
 
     _users_guard.unlock();
 
-    if(result)
+    return user_ptr;
+}
+
+int server::forward(uint16_t receiver_id, uint16_t sender_id, std::string message)
+{
+    auto receiver_ptr = get_user_by_id(receiver_id);
+
+    std::cout<<"Sending: "<<message<<", to: "<<receiver_id<<", from: "<<sender_id<<std::endl;
+
+    if (receiver_ptr != nullptr)
     {
+        _users_guard.lock();
+
+        receiver_ptr->new_messages.insert(std::make_pair(sender_id, message));
+
+        _users_guard.unlock();
+
         return 0;
     }
 
     return 1;
 }
 
-void server::fetch(int socket_fd, uint16_t id)
+void server::fetch(int socket_fd, std::string username)
 {
     std::map<uint16_t, std::string> messages;
 
     _users_guard.lock();
 
-    for (
-        auto it = _users.begin();
-        it != _users.end();
-        it++)
+    auto user_it = _users.find(username);
+
+    if (user_it != _users.end())
     {
-        if ((*it)->user_id == id)
-        {
-            messages = (*it)->new_messages;
-            (*it)->new_messages.clear();
-            break;
-        }
+        messages = ((*user_it).second)->new_messages;
+        ((*user_it).second)->new_messages.clear();
     }
 
     _users_guard.unlock();
 
-    int m_id = 0;
+    int m_id = messages.size();
 
     if (messages.size() > 0)
     {
@@ -336,7 +359,7 @@ void server::fetch(int socket_fd, uint16_t id)
             msg_buf[1] = ((*it).first & 0x00FF);
             memcpy(msg_buf + 2, (*it).second.c_str(), (*it).second.size());
             send_buf(socket_fd, Message_t::RECEIVEREPLY, m_id, msg_buf, buf_len);
-            m_id++;
+            m_id--;
         }
     }
     else
