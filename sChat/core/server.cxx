@@ -312,8 +312,6 @@ int server::forward(uint16_t receiver_id, uint16_t sender_id, std::string messag
 {
     auto receiver_ptr = get_user_by_id(receiver_id);
 
-    std::cout<<"Sending: "<<message<<", to: "<<receiver_id<<", from: "<<sender_id<<std::endl;
-
     if (receiver_ptr != nullptr)
     {
         _users_guard.lock();
