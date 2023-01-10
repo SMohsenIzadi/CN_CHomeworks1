@@ -1,1 +1,1 @@
-#Simple Chat client
+# Simple Chat client (sChat Client)

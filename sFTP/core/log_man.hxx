@@ -28,7 +28,7 @@ public:
 private:
 
 
-log_state _state;
+log_state _state = default_state;
 
 std::string log_path;
 std::shared_mutex log_guard;

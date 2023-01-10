@@ -1,0 +1,13 @@
+info :: 2023-01-10 14:06:18.171787637 (UTC) :: main :: Server started.
+info :: 2023-01-10 14:06:18.172169010 (UTC) :: socket_man.accept_data :: Client requested data connection. IP: 127.0.0.1
+info :: 2023-01-10 14:06:18.172267778 (UTC) :: socket_man.client_handler :: Client disconnected. IP: 127.0.0.1
+info :: 2023-01-10 14:08:07.226348366 (UTC) :: socket_man.accept_cmd :: Client connected to server. IP: 127.0.0.1
+info :: 2023-01-10 14:09:08.581171088 (UTC) :: socket_man.client_handler :: Client: Mohsen, Logged in successfully, IP: 127.0.0.1
+info :: 2023-01-10 14:09:29.708112189 (UTC) :: socket_man.accept_data :: Client requested data connection. IP: 127.0.0.1
+info :: 2023-01-10 14:09:29.711819446 (UTC) :: socket_man.client_handler :: Client: Mohsen, downloaded file: test.txt, IP: 127.0.0.1
+info :: 2023-01-10 14:09:45.398714598 (UTC) :: socket_man.client_handler :: Client: Mohsen, logged out
+info :: 2023-01-10 14:09:54.754547871 (UTC) :: socket_man.client_handler :: Client: Ali, Logged in successfully, IP: 127.0.0.1
+info :: 2023-01-10 14:10:12.124779090 (UTC) :: socket_man.accept_data :: Client requested data connection. IP: 127.0.0.1
+info :: 2023-01-10 14:10:12.129001826 (UTC) :: socket_man.client_handler :: Client: Ali, uploaded file: test-up.txt, IP: 127.0.0.1
+info :: 2023-01-10 14:10:29.463539296 (UTC) :: socket_man.client_handler :: Client: Ali, logged out
+info :: 2023-01-10 14:10:31.506793750 (UTC) :: socket_man.client_handler :: Anonymous client requested exit. IP: 127.0.0.1
